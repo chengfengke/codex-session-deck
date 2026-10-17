@@ -1,0 +1,27 @@
+name: Linux
+on: [push, pull_request, workflow_dispatch]
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - run: cargo fmt --check
+      - run: cargo clippy --locked --all-targets -- -D warnings
+      - run: cargo test --locked
+      - run: cargo build --locked
+      - run: python3 tests/integration.py
+      - run: python3 tests/responsiveness.py
+      - run: python3 tests/manager_pty.py
+      - run: python3 tests/model_picker_pty.py
+      - run: python3 tests/search_integration.py
+      - run: python3 tests/workspace_pty.py
+      - run: python3 tests/rename_compat.py
+      - run: python3 tests/pty_smoke.py
+      - run: ./scripts/build.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: codex-deck-linux-x64
+          path: bin/codex-deck-*

@@ -1,0 +1,26 @@
+#!/bin/sh
+set -eu
+deck_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+case "$(uname -s)" in Linux) deck_os=linux;; *) echo 'Codex Deck requires Linux.' >&2; exit 1;; esac
+case "$(uname -m)" in arm64|aarch64) deck_arch=arm64;; x86_64|amd64) deck_arch=x64;; *) deck_arch=$(uname -m);; esac
+# The Linux deployment has always kept its state next to this launcher.
+if [ "$deck_os" = linux ]; then
+  export XDG_STATE_HOME="${XDG_STATE_HOME:-$deck_dir/.state}"
+fi
+deck_codex=${CODEX_DECK_CODEX:-${SESSIONDESK_CODEX:-}}
+if [ -z "$deck_codex" ]; then
+  deck_codex=$(command -v codex || :)
+  if [ -z "$deck_codex" ] && [ -x "$HOME/.local/bin/codex" ]; then
+    deck_codex="$HOME/.local/bin/codex"
+  fi
+fi
+if [ -n "$deck_codex" ]; then CODEX_DECK_CODEX=$deck_codex; export CODEX_DECK_CODEX; fi
+deck_binary="$deck_dir/bin/codex-deck-$deck_os-$deck_arch"
+if [ ! -x "$deck_binary" ]; then
+  if [ -z "$(command -v cargo || :)" ]; then
+    echo "No prebuilt binary for $deck_os/$deck_arch. Install stable Rust, then run ./scripts/build.sh." >&2
+    exit 1
+  fi
+  "$deck_dir/scripts/build.sh"
+fi
+exec "$deck_binary" "$@"

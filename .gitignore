@@ -1,0 +1,18 @@
+target/
+*.sock
+*.sqlite*
+__pycache__/
+.runtime/
+.state/
+.sessiondesk-source.tar.gz
+
+# Local builds, runtime state, and machine-specific files
+bin/
+._*
+*.log
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.codex/

@@ -1,0 +1,39 @@
+ ◆ Codex Deck  DEMO  ·  2 running  ·  0 requests                                                                                          [ Approvals ] [ Help ]
+[ Tasks ]  [ Find messages ]  [ Hide side ]
+ CONVERSATIONS              │ Implement login                                                              │ Side · failure cases
+ + New conversation         │ Execute / workspace write · gpt-5.4 · running                                │ Discussion / read only · gpt-5.4 · completed · /p…
+ Active · show archived     │ cwd for next task: examples/platform                                         │ cwd for next task: examples/platform
+ Filter chats / paths   [x] │ You                                                                          │ Side of Implement login · /send-parent to return a
+                            │ 实现登录流程，保留现有 API，并补充错误处理。                                 │ draft
+ ▾ api (1)                  │                                                                              │
+ examples/api               │ Codex                                                                        │ You
+  ! API migration           │ 我正在检查会话验证和错误路径。                                               │ 检查登录失败时的边界情况。
+ ▾ docs (1)                 │                                                                              │
+ examples/docs              │ 已经完成：                                                                   │ Codex
+    Update documentation    │ • 验证 token 生命周期                                                        │ 建议覆盖三种情况：
+ ▾ platform (2)             │ • 为登录表单加入清晰的错误提示                                               │
+ examples/platform          │                                                                              │ 1. 过期 token 的刷新失败
+  ● Implement login         │ 接下来运行测试，并检查回归。                                                 │ 2. 网络中断后再次提交
+   ↳    Side · failure cas… │                                                                              │ 3. 用户取消授权
+                            │ Command ●                                                                    │
+                            │ $ cargo test auth                                                            │ 使用 /send-parent 把这些建议放入主对话草稿。
+                            │                                                                              │
+                            │ running 12 tests                                                             │
+                            │ test auth::refresh_token ... ok                                              │
+                            │                                                                              │
+                            │                                                                              │
+                            │                                                                              │
+                            │                                                                              │
+                            │                                                                              │
+                            │                                                                              │
+                            │                                                                              │
+                            │                                                                              │
+                            │                                                                              │
+                            │                                                                              │
+                            │                                                                              │
+                            │                                                                              │
+                            │                                                                              │
+                            │┌ Message · Enter queues · /steer to redirect ───────────────────────────────┐│┌ Message · Enter send · Ctrl+J newline ───────────┐
+                            ││继续检查并发登录的情况                                                      │││                                                  │
+ ↑↓ select · Enter open     │└────────────────────────────────────────────────────────────────────────────┘│└──────────────────────────────────────────────────┘
+running · examples/platform  ·  Ctrl+G commands  ·  F1 help  ·  PgUp/PgDn history
