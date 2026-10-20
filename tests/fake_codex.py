@@ -37,7 +37,7 @@ def complete(key, turn_id, status='completed'):
         if not turn or turn['status'] != 'inProgress':
             return
         turn['status'] = status
-        turn['items'].append({'id': turn_id+'-assistant', 'type':'agentMessage', 'text':'Reply from '+key, 'status':'completed'})
+        turn['items'].append({'id': turn_id+'-assistant', 'type':'agentMessage', 'text':(r'DTW: \(d_{ij}=\operatorname{clip}(1-\cos(e_i,e_j),\,0,\,2)\) · \(\boxed{[0,2]}\)' if os.environ.get('FAKE_CODEX_ACTIVITY') else 'Reply from '+key), 'status':'completed'})
         event('item/completed', threadId=key, turnId=turn_id, item=turn['items'][-1])
         event('turn/completed', threadId=key, turn=turn)
         t['status']={'type':'idle'}
@@ -121,13 +121,37 @@ def handle(v):
         reply(v, {'turn':turn})
         event('turn/started', threadId=key, turn=turn)
         event('item/completed', threadId=key, turnId=tid, item=turn['items'][0])
+        if os.environ.get('FAKE_CODEX_ACTIVITY'):
+            reasoning={'id':tid+'-reasoning','type':'reasoning','summary':[],'content':['PRIVATE_RAW_REASONING']}
+            command={'id':tid+'-command','type':'commandExecution','command':'echo ACTIVITY_OUTPUT','cwd':p['cwd'],'status':'inProgress'}
+            tool={'id':tid+'-tool','type':'mcpToolCall','server':'fixture','tool':'lookup','arguments':{'topic':'public activity'},'status':'inProgress'}
+            turn['items'].extend([reasoning,command,tool])
+            event('item/started',threadId=key,turnId=tid,item=reasoning)
+            event('item/reasoning/summaryTextDelta',threadId=key,turnId=tid,itemId=reasoning['id'],summaryIndex=0,delta='PUBLIC_SUMMARY ')
+            event('item/reasoning/summaryTextDelta',threadId=key,turnId=tid,itemId=reasoning['id'],summaryIndex=0,delta='checking the equation')
+            event('item/reasoning/summaryPartAdded',threadId=key,turnId=tid,itemId=reasoning['id'],summaryIndex=1)
+            event('item/reasoning/summaryTextDelta',threadId=key,turnId=tid,itemId=reasoning['id'],summaryIndex=1,delta='SECOND_SUMMARY')
+            event('item/reasoning/textDelta',threadId=key,turnId=tid,itemId=reasoning['id'],contentIndex=0,delta='PRIVATE_RAW_REASONING')
+            event('turn/plan/updated',threadId=key,turnId=tid,explanation='Fixture execution plan',plan=[{'step':'Inspect equation','status':'completed'},{'step':'Verify output','status':'in_progress'}])
+            event('item/started',threadId=key,turnId=tid,item=command)
+            event('item/commandExecution/outputDelta',threadId=key,turnId=tid,itemId=command['id'],delta='ACTIVITY_OUTPUT\n')
+            event('item/started',threadId=key,turnId=tid,item=tool)
+            event('item/mcpToolCall/progress',threadId=key,turnId=tid,itemId=tool['id'],message='TOOL_PROGRESS')
+            def finish_activity():
+                with lock:
+                    reasoning['summary']=['PUBLIC_SUMMARY checking the equation','SECOND_SUMMARY']
+                    command.update(status='completed',exitCode=0,durationMs=325,aggregatedOutput=None)
+                    tool.update(status='completed',durationMs=325,result={'content':[{'type':'text','text':'TOOL_RESULT'}]})
+                    for item in [reasoning,command,tool]:event('item/completed',threadId=key,turnId=tid,item=item)
+                    event('turn/plan/updated',threadId=key,turnId=tid,plan=[{'step':'Inspect equation','status':'completed'},{'step':'Verify output','status':'completed'}])
+            threading.Timer(.7,finish_activity).start()
         event('item/agentMessage/delta', threadId=key, turnId=tid, itemId=tid+'-assistant', delta='Stream from '+key)
         if 'approval' in text:
             rid='request-'+tid
             pending[rid]=(key,tid)
             emit({'id':rid,'method':'item/commandExecution/requestApproval','params':{'threadId':key,'turnId':tid,'itemId':'cmd-'+tid,'command':'echo fixture','cwd':p['cwd'],'reason':'fixture approval'}})
         else:
-            delay=float(os.environ.get('FAKE_CODEX_TURN_DELAY',1.5 if 'slow' in text else .12))
+            delay=float(os.environ.get('FAKE_CODEX_TURN_DELAY',1.5 if 'slow' in text or os.environ.get('FAKE_CODEX_ACTIVITY') else .12))
             threading.Timer(delay, complete, args=(key,tid)).start()
     elif method == 'turn/steer':
         assert p['expectedTurnId']

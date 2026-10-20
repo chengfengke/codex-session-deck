@@ -15,7 +15,7 @@
  examples/platform          │                                                                              │ 1. 过期 token 的刷新失败
   ● Implement login         │ 接下来运行测试，并检查回归。                                                 │ 2. 网络中断后再次提交
    ↳    Side · failure cas… │                                                                              │ 3. 用户取消授权
-                            │ Command ●                                                                    │
+                            │ Command · ● Running                                                          │
                             │ $ cargo test auth                                                            │ 使用 /send-parent 把这些建议放入主对话草稿。
                             │                                                                              │
                             │ running 12 tests                                                             │

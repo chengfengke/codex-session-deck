@@ -18,6 +18,7 @@ jobs:
       - run: python3 tests/model_picker_pty.py
       - run: python3 tests/search_integration.py
       - run: python3 tests/workspace_pty.py
+      - run: python3 tests/activity_pty.py
       - run: python3 tests/rename_compat.py
       - run: python3 tests/pty_smoke.py
       - run: ./scripts/build.sh

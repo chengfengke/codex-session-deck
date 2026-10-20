@@ -1,6 +1,8 @@
+mod activity;
 mod client;
 mod daemon;
 mod layout;
+mod markup;
 mod model;
 mod rpc;
 mod search;

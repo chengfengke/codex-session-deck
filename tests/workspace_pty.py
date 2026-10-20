@@ -74,6 +74,8 @@ with tempfile.TemporaryDirectory(prefix='sd-workspace-') as tmp:
                             raise
             def command(text):os.write(fd,b'\x07:'+text.encode()+b'\r');read_for(.12)
             read_for(.4)
+            assert b'LOCAL-MAIN_BODY' in output and b'LOCAL-SIDE_BODY' not in output
+            command('side-panel show')
             assert b'LOCAL-MAIN_BODY' in output and b'LOCAL-SIDE_BODY' in output
             os.write(fd,b'\x07o');s=wait(lambda s:'local-main' in s['data']['collapsed_side_panels'])
             assert s['data']['layouts']['local-main']==layout and s['data']['drafts']==drafts

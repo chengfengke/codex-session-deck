@@ -33,8 +33,12 @@ try:
         os.kill(pid,signal.SIGWINCH)
         read_for(.1)
     os.write(master,b'\x07q')
-    read_for(.4)
-    finished,status=os.waitpid(pid,os.WNOHANG)
+    deadline=time.monotonic()+5
+    finished=0
+    while time.monotonic()<deadline:
+        read_for(.05)
+        finished,status=os.waitpid(pid,os.WNOHANG)
+        if finished:break
     assert finished==pid, 'TUI did not detach'
     assert os.waitstatus_to_exitcode(status)==0, 'TUI failed'
     assert b'Codex Deck' in output and b'keyboard' in output, 'workspace/help did not render'

@@ -51,6 +51,11 @@ with tempfile.TemporaryDirectory(prefix='sd-manager-') as tmp:
                     if predicate(s):return s
                 raise AssertionError('TUI state timed out')
             until=time.monotonic()+8
+            while b'PRIMARY_A' not in output and time.monotonic()<until:read_for(.05)
+            assert b'PRIMARY_A' in output and b'SIDE_A' not in output,'side should start hidden'
+            assert snapshot()['data']['layouts']['local-a']==layout
+            os.write(fd,b'\x07:side-panel show\r')
+            until=time.monotonic()+8
             while b'SIDE_A' not in output and time.monotonic()<until:read_for(.05)
             assert b'CONVERSATIONS' in output and b'PRIMARY_A' in output and b'SIDE_A' in output,'3 columns missing at 80'
             os.write(fd,b'\x1b[<0;4;14M\x1b[<0;4;14m')

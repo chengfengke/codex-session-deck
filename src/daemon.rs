@@ -1,4 +1,5 @@
 use crate::{
+    activity::{role, Activity},
     layout::Node,
     model::*,
     rpc::{item_text, text, Rpc},
@@ -39,6 +40,7 @@ struct Host {
     generation: u64,
     loads: HashMap<String, HistoryTask>,
     search_cancel: Option<Arc<AtomicBool>>,
+    activity: Activity,
 }
 struct HistoryTask {
     token: String,
@@ -92,6 +94,7 @@ pub async fn run() -> Result<()> {
         generation: 0,
         loads: HashMap::new(),
         search_cancel: None,
+        activity: Activity::default(),
     };
     let (wtx, wrx) = watch::channel(host.snap.clone());
     tokio::spawn(async move {
@@ -223,6 +226,7 @@ impl Host {
             "Backend is connected and tasks are active; stop them before reconnecting."
         );
         self.generation += 1;
+        self.activity.clear();
         if let Some(cancel) = self.search_cancel.take() {
             cancel.store(true, Ordering::Relaxed);
         }
@@ -469,15 +473,34 @@ impl Host {
                         let role = role(&text(item, "type"));
                         let content = item_text(item);
                         if let Some(m) = c.messages.iter_mut().find(|m| m.id == mid) {
-                            if m.text.is_empty() {
+                            if !content.is_empty()
+                                && (m.text.is_empty() || turn["status"] != "inProgress")
+                                && (m.text.is_empty()
+                                    || item["type"] != "commandExecution"
+                                    || item["aggregatedOutput"]
+                                        .as_str()
+                                        .is_some_and(|s| !s.is_empty()))
+                            {
                                 m.text = content;
+                            }
+                            m.role = role;
+                            if turn["status"] != "inProgress" {
+                                m.status = item["status"]
+                                    .as_str()
+                                    .or_else(|| turn["status"].as_str())
+                                    .unwrap_or("completed")
+                                    .into();
                             }
                         } else {
                             fresh.push(Message {
                                 id: mid,
                                 role,
                                 text: content,
-                                status: text(item, "status"),
+                                status: item["status"]
+                                    .as_str()
+                                    .or_else(|| turn["status"].as_str())
+                                    .unwrap_or_default()
+                                    .into(),
                             });
                         }
                     }
@@ -1149,7 +1172,7 @@ impl Host {
             }
             c.status = "starting".into();
             let model = c.model.clone();
-            let mut params = json!({"threadId":key,"cwd":q.cwd,"input":[{"type":"text","text":q.text}],"sandboxPolicy":{"type":if q.readonly{"readOnly"}else{"workspaceWrite"}}});
+            let mut params = json!({"threadId":key,"cwd":q.cwd,"input":[{"type":"text","text":q.text}],"summary":"auto","sandboxPolicy":{"type":if q.readonly{"readOnly"}else{"workspaceWrite"}}});
             if !model.is_empty() {
                 params["model"] = json!(model)
             }
@@ -1194,6 +1217,7 @@ impl Host {
             self.snap.connected = false;
             self.snap.error="Codex disconnected. Use /reconnect; uncertain tasks are never automatically resent.".into();
             self.snap.pending.clear();
+            self.activity.clear();
             for c in self.snap.data.conversations.values_mut() {
                 if c.busy() {
                     c.status = "unknown".into();
@@ -1244,6 +1268,12 @@ impl Host {
         };
         c.unread = true;
         c.updated = now();
+        if self.activity.update(c, &method, p) {
+            if c.messages.len() > 1500 {
+                c.messages.drain(..c.messages.len() - 1000);
+            }
+            return;
+        }
         match method.as_str() {
             "turn/started" => {
                 c.active_turn = p["turn"]["id"].as_str().map(String::from);
@@ -1260,32 +1290,12 @@ impl Host {
                     c.last_turn = p["turn"]["id"].as_str().map(String::from)
                 }
                 c.active_turn = None;
+                let status = c.status.clone();
+                self.activity.finish(c, &text(&p["turn"], "id"), &status);
                 self.snap.pending.retain(|r| r.thread != key);
                 if let Some(error) = p["turn"]["error"].as_object() {
                     c.item(&id(), "Error").text = serde_json::to_string(error).unwrap_or_default();
                 }
-            }
-            "item/started" | "item/completed" => {
-                let i = &p["item"];
-                let mid = text(i, "id");
-                let role = role(&text(i, "type"));
-                let m = c.item(&mid, &role);
-                let content = item_text(i);
-                if !content.is_empty() {
-                    m.text = content;
-                }
-                m.status = text(i, "status");
-            }
-            "item/agentMessage/delta" => {
-                let mid = text(p, "itemId");
-                let m = c.item(&mid, "Codex");
-                m.text.push_str(p["delta"].as_str().unwrap_or_default());
-            }
-            "item/commandExecution/outputDelta" => {
-                let mid = text(p, "itemId");
-                c.item(&mid, "Command")
-                    .text
-                    .push_str(p["delta"].as_str().unwrap_or_default());
             }
             "turn/diff/updated" => c.diff = text(p, "diff"),
             "thread/status/changed" => {
@@ -1317,17 +1327,6 @@ impl Host {
             c.messages.drain(..c.messages.len() - 1000);
         }
     }
-}
-fn role(t: &str) -> String {
-    match t {
-        "userMessage" => "You",
-        "agentMessage" => "Codex",
-        "commandExecution" => "Command",
-        "fileChange" => "Files",
-        "reasoning" => "Thinking",
-        _ => "Tool",
-    }
-    .into()
 }
 fn absolute(s: &str) -> Result<String> {
     let p = Path::new(s);

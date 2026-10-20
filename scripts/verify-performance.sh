@@ -12,6 +12,7 @@ python3 tests/manager_pty.py target/release/codex-deck
 python3 tests/model_picker_pty.py target/release/codex-deck
 python3 tests/search_integration.py target/release/codex-deck
 python3 tests/workspace_pty.py target/release/codex-deck
+python3 tests/activity_pty.py target/release/codex-deck
 python3 tests/rename_compat.py target/release/codex-deck "${CODEX_DECK_LEGACY_BINARY:-target/release/codex-deck}"
 python3 tests/integration.py target/release/codex-deck
 python3 tests/pty_smoke.py target/release/codex-deck

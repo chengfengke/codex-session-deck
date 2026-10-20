@@ -312,29 +312,49 @@ impl Transcript {
                 "Error" => Color::LightRed,
                 _ => MUTED,
             };
-            let lines = std::iter::once(Line::styled(
-                format!(
-                    "{} {}",
-                    message.role,
+            let status = match message.status.as_str() {
+                "inProgress" | "running" => " · ● Running",
+                "completed" => " · ✓ Completed",
+                "failed" => " · ✗ Failed",
+                "declined" => " · ✗ Declined",
+                "interrupted" => " · ■ Interrupted",
+                "unknown" => " · ? Unknown",
+                _ => "",
+            };
+            let color = if matches!(message.status.as_str(), "failed" | "declined") {
+                Color::LightRed
+            } else {
+                rc
+            };
+            let mut lines = vec![Line::styled(
+                format!("{}{status}", message.role),
+                style(color).add_modifier(Modifier::BOLD),
+            )];
+            let body_style = style(if message.role == "Command" || message.role == "Thinking" {
+                MUTED
+            } else {
+                FG
+            });
+            if message.role == "Codex" || message.role == "Thinking" {
+                lines.extend(crate::markup::markdown(&message.text, body_style));
+            } else {
+                lines.extend(
+                    crate::markup::clean(&message.text)
+                        .lines()
+                        .map(|line| Line::styled(line.to_owned(), body_style)),
+                );
+            }
+            if message.role == "Thinking" && message.text.trim().is_empty() {
+                lines.push(Line::styled(
                     if message.status == "inProgress" {
-                        "●"
+                        "Waiting for a reasoning summary…"
                     } else {
-                        ""
-                    }
-                ),
-                style(rc).add_modifier(Modifier::BOLD),
-            ))
-            .chain(message.text.lines().map(|line| {
-                Line::styled(
-                    line.to_owned(),
-                    style(if message.role == "Command" || message.role == "Thinking" {
-                        MUTED
-                    } else {
-                        FG
-                    }),
-                )
-            }))
-            .chain(std::iter::once(Line::default()));
+                        "No reasoning summary was provided."
+                    },
+                    style(MUTED),
+                ));
+            }
+            lines.push(Line::default());
             let cached = CachedMessage {
                 source: message.clone(),
                 rendered: CachedLines::new(lines, width),
@@ -354,6 +374,12 @@ impl Transcript {
             ));
             suffix.push(Line::styled(
                 "/side <question> or /btw <question> opens a side conversation.",
+                style(MUTED),
+            ));
+        }
+        if c.busy() && !c.messages.iter().any(|m| m.status == "inProgress") {
+            suffix.push(Line::styled(
+                "● Waiting for the next Codex update…",
                 style(MUTED),
             ));
         }
@@ -552,6 +578,9 @@ impl App {
     fn switch_workspace(&mut self, root: &str) {
         self.persist();
         self.root = root.into();
+        if !self.layouts.contains_key(root) {
+            self.collapsed_side_panels.insert(root.into());
+        }
         self.layout = self
             .layouts
             .get(root)
@@ -712,10 +741,17 @@ impl App {
                                 .iter()
                                 .cloned()
                                 .collect();
+                            self.collapsed_side_panels.extend(
+                                snapshot
+                                    .data
+                                    .conversations
+                                    .values()
+                                    .filter(|c| c.parent.is_none() || c.promoted)
+                                    .map(|c| c.id.clone()),
+                            );
                         }
                         self.snap = snapshot;
                         if !self.booted && self.snap.connected {
-                            self.booted = true;
                             let key = self
                                 .snap
                                 .data
@@ -724,6 +760,7 @@ impl App {
                                 .filter(|k| self.snap.data.conversations.contains_key(k))
                                 .or_else(|| self.sorted(false, "").first().cloned());
                             if let Some(k) = key {
+                                self.booted = true;
                                 self.open(&k);
                             }
                         }
@@ -1255,9 +1292,20 @@ impl App {
             action: action.into(),
         });
     }
+    fn side_visible(&self) -> bool {
+        let mut ids = vec![];
+        self.layout.ids(&mut ids);
+        !self.collapsed_side_panels.contains(&self.root) && ids.iter().any(|id| id != &self.root)
+    }
     fn toggle_side(&mut self, show: Option<bool>) {
-        let show = show.unwrap_or_else(|| self.collapsed_side_panels.contains(&self.root));
+        let show = show.unwrap_or_else(|| !self.side_visible());
         if show {
+            let mut ids = vec![];
+            self.layout.ids(&mut ids);
+            if !ids.iter().any(|id| id != &self.root) {
+                self.notice("Use /side or /btw to open a side conversation");
+                return;
+            }
             self.collapsed_side_panels.remove(&self.root);
         } else {
             if let Some(layout) = self.maximize.take() {
@@ -2574,10 +2622,10 @@ impl App {
             (11, "[ Find messages ]", Hit::Find),
             (
                 30,
-                if self.collapsed_side_panels.contains(&self.root) {
-                    "[ Show side ]"
-                } else {
+                if self.side_visible() {
                     "[ Hide side ]"
+                } else {
+                    "[ Show side ]"
                 },
                 Hit::ToggleSide,
             ),
@@ -2612,25 +2660,8 @@ impl App {
         } else {
             content
         };
-        let mut ids = vec![];
-        self.layout.ids(&mut ids);
-        let empty_side = self.maximize.is_none()
-            && !self.collapsed_side_panels.contains(&self.root)
-            && self.layout.leaves() == 1
-            && ids.len() <= 1
-            && main.width >= 41;
         let layout = if self.collapsed_side_panels.contains(&self.root) {
             Node::single(&self.root)
-        } else if empty_side {
-            Node::Split {
-                vertical: false,
-                ratio: 600,
-                first: Box::new(self.layout.clone()),
-                second: Box::new(Node::Tabs {
-                    ids: vec![],
-                    active: 0,
-                }),
-            }
         } else {
             self.layout.clone()
         };
@@ -2646,7 +2677,7 @@ impl App {
             }
         }
         self.panes = panes.clone();
-        self.dividers = if empty_side { vec![] } else { dividers.clone() };
+        self.dividers = dividers.clone();
         for d in &dividers {
             f.render_widget(
                 Block::default()
@@ -3949,6 +3980,44 @@ mod tests {
         terminal.draw(|f| app.draw(f)).unwrap();
     }
     #[test]
+    fn startup_hides_saved_side_views_without_discarding_them() {
+        let saved = demo();
+        let layout = saved.layout.clone();
+        let mut snapshot = saved.snap.clone();
+        snapshot
+            .data
+            .layouts
+            .insert("demo-main".into(), layout.clone());
+        snapshot.data.active = Some("demo-main".into());
+        snapshot.data.sidebar = true;
+        let (client, input, _) = Client::fixture();
+        let mut app = App::new(Some(client));
+        let empty = Snapshot {
+            connected: true,
+            ..Default::default()
+        };
+        input
+            .send(json!({"type":"snapshot","snapshot":empty}))
+            .unwrap();
+        app.receive();
+        assert!(!app.booted);
+        input
+            .send(json!({"type":"snapshot","snapshot":snapshot}))
+            .unwrap();
+        app.receive();
+        for width in [80, 100, 160] {
+            draw_at(&mut app, width);
+            assert_eq!(app.panes.len(), 1);
+        }
+        assert_eq!(app.layout, layout);
+        assert!(app.snap.data.conversations.contains_key("demo-side"));
+        assert_eq!(app.snap.data.conversations["demo-main"].status, "running");
+        app.open("demo-side");
+        draw_at(&mut app, 100);
+        assert_eq!(app.panes.len(), 2);
+        assert_eq!(app.focus, "demo-side");
+    }
+    #[test]
     fn collapsed_side_restores_layout_and_last_close_reclaims_space() {
         let mut app = demo();
         let saved = app.layout.clone();
@@ -4060,8 +4129,7 @@ mod tests {
         }
         app.layout = Node::single("demo-main");
         draw_at(&mut app, 80);
-        assert_eq!(app.panes.len(), 2);
-        assert!(app.panes[1].ids.is_empty());
+        assert_eq!(app.panes.len(), 1);
         assert_eq!(app.layout, Node::single("demo-main"));
     }
     #[test]
@@ -4187,7 +4255,7 @@ mod tests {
             let mut cache = Transcript::default();
             cache.update(&c, None, width);
             let mut lines = vec![Line::styled(
-                "Codex ",
+                "Codex",
                 style(FG).add_modifier(Modifier::BOLD),
             )];
             lines.extend(

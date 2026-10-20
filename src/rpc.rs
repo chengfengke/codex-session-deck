@@ -140,43 +140,4 @@ impl RpcHandle {
 pub fn text(v: &Value, key: &str) -> String {
     v[key].as_str().unwrap_or_default().to_string()
 }
-pub fn item_text(v: &Value) -> String {
-    if let Some(s) = v["text"].as_str() {
-        return s.into();
-    }
-    if let Some(a) = v["content"].as_array() {
-        return a
-            .iter()
-            .filter_map(|x| x["text"].as_str())
-            .collect::<Vec<_>>()
-            .join("\n");
-    }
-    if let Some(s) = v["command"].as_str() {
-        return format!(
-            "$ {s}\n{}",
-            v["aggregatedOutput"].as_str().unwrap_or_default()
-        );
-    }
-    if let Some(s) = v["output"].as_str() {
-        return s.into();
-    }
-    if v["type"] == "fileChange" {
-        return format!("File changes\n{}", v["changes"]);
-    }
-    if v["type"] == "reasoning" {
-        return v["summary"]
-            .as_array()
-            .map(|a| {
-                a.iter()
-                    .filter_map(|v| v.as_str().or_else(|| v["text"].as_str()))
-                    .collect::<Vec<_>>()
-                    .join("\n")
-            })
-            .unwrap_or_default();
-    }
-    format!(
-        "{} {}",
-        text(v, "type"),
-        v.get("tool").unwrap_or(&Value::Null)
-    )
-}
+pub use crate::activity::item_text;

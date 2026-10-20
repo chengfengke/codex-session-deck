@@ -101,11 +101,7 @@ fn turns(db: &mut Connection, thread: &str, data: &[Value], order: &mut i64) -> 
     for turn in data {
         if let Some(items) = turn["items"].as_array() {
             for (i, item) in items.iter().enumerate() {
-                let role = match text(item, "type").as_str() {
-                    "userMessage" => "You".into(),
-                    "agentMessage" => "Codex".into(),
-                    other => other.into(),
-                };
+                let role = crate::activity::role(&text(item, "type"));
                 let mut mid = text(item, "id");
                 if mid.is_empty() {
                     mid = format!("{}-{i}", text(turn, "id"));
