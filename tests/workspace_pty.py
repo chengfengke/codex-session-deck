@@ -61,6 +61,11 @@ with tempfile.TemporaryDirectory(prefix='sd-workspace-') as tmp:
                 workers.append(s['data']['aliases'][key])
             running,attention=workers
             wait(lambda s:any(p['thread']==attention for p in s['pending']))
+            # Materializing each worker selects it. Publish the intended startup
+            # workspace before attaching, rather than relying on a stale snapshot.
+            sequence=client.call('snapshot')['seq']
+            client.call('view',root='local-main',layout=layout)
+            wait(lambda s:s['seq']>sequence and s['data']['active']=='local-main')
             pid,fd=pty.fork()
             if pid==0:os.execve(str(BINARY),[str(BINARY)],env)
             fcntl.ioctl(fd,termios.TIOCSWINSZ,struct.pack('HHHH',40,160,0,0));output=bytearray()
@@ -73,10 +78,16 @@ with tempfile.TemporaryDirectory(prefix='sd-workspace-') as tmp:
                             if e.errno==errno.EIO:return
                             raise
             def command(text):os.write(fd,b'\x07:'+text.encode()+b'\r');read_for(.12)
-            read_for(.4)
-            assert b'LOCAL-MAIN_BODY' in output and b'LOCAL-SIDE_BODY' not in output
+            def terminal_has(marker):
+                end=time.monotonic()+12
+                while time.monotonic()<end:
+                    read_for(.025)
+                    if marker in output:return
+                raise AssertionError('Terminal marker missing: '+repr(marker)+'; '+output[-3000:].decode(errors='replace'))
+            terminal_has(b'LOCAL-MAIN_BODY')
+            assert b'LOCAL-SIDE_BODY' not in output
             command('side-panel show')
-            assert b'LOCAL-MAIN_BODY' in output and b'LOCAL-SIDE_BODY' in output
+            terminal_has(b'LOCAL-SIDE_BODY')
             os.write(fd,b'\x07o');s=wait(lambda s:'local-main' in s['data']['collapsed_side_panels'])
             assert s['data']['layouts']['local-main']==layout and s['data']['drafts']==drafts
             os.write(fd,b'\x07o');wait(lambda s:'local-main' not in s['data']['collapsed_side_panels'])
@@ -93,8 +104,8 @@ with tempfile.TemporaryDirectory(prefix='sd-workspace-') as tmp:
             archived=next(i for i,h in enumerate(s['search']['hits']) if h['archived'])
             target=s['search']['hits'][archived]['thread']
             os.write(fd,b'\x1b[B'*archived+b'\r');s=wait(lambda s:s['data']['active']==target)
-            read_for(.15)
-            assert b'Search context' in output and b'Hidden-NEEDLE' in output
+            terminal_has(b'Search context')
+            terminal_has(b'Hidden-NEEDLE')
             assert not any('Hidden-NEEDLE' in m['text'] for m in s['data']['conversations'][target]['messages']),'search replaced the live cache'
             command('live')
             assert s['data']['drafts']['local-main']==drafts['local-main']
@@ -103,7 +114,7 @@ with tempfile.TemporaryDirectory(prefix='sd-workspace-') as tmp:
                 os.write(fd,b'\x07t');read_for(.12);os.write(fd,keys+b'\r')
                 wait(lambda s:s['data']['active']==target)
             os.write(fd,b'\x07t');read_for(.1);os.write(fd,b'Attention\x1bOQ');read_for(.15)
-            assert b'Request' in output
+            terminal_has(b'Request')
             os.write(fd,b'\x1b');read_for(.06)
             for rows,cols in [(24,80),(24,100),(40,160)]:
                 for shortcut in [b'\x07/',b'\x07t']:
@@ -114,8 +125,16 @@ with tempfile.TemporaryDirectory(prefix='sd-workspace-') as tmp:
             assert any(p['thread']==attention for p in s['pending'])
             assert s['data']['conversations']['local-queue']['queued'][0]['state']=='held'
             assert all(s['data']['drafts'][k]==v for k,v in drafts.items())
-            os.write(fd,b'\x07q');read_for(.4)
-            done,status=os.waitpid(pid,os.WNOHANG);assert done==pid;finished=True;assert os.waitstatus_to_exitcode(status)==0
+            os.write(fd,b'\x07q')
+            end=time.monotonic()+5
+            while time.monotonic()<end:
+                read_for(.025)
+                done,status=os.waitpid(pid,os.WNOHANG)
+                if done:
+                    finished=True
+                    assert os.waitstatus_to_exitcode(status)==0
+                    break
+            assert finished,'TUI did not detach'
             assert b'\x1b[?1049l' in output
             calls=[json.loads(s) for s in (home/'rpc.jsonl').read_text().splitlines()]
             assert len([v for v in calls if v.get('method')=='turn/start'])==2,'navigation submitted an extra task'
