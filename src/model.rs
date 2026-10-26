@@ -278,6 +278,12 @@ impl SnapshotDelta {
         self.metadata
     }
 }
+fn user_home() -> PathBuf {
+    std::env::var_os("HOME")
+        .or_else(|| std::env::var_os("USERPROFILE"))
+        .map(PathBuf::from)
+        .unwrap_or_default()
+}
 pub fn state_dir() -> PathBuf {
     if let Some(p) =
         std::env::var_os("CODEX_DECK_HOME").or_else(|| std::env::var_os("SESSIONDESK_HOME"))
@@ -287,13 +293,17 @@ pub fn state_dir() -> PathBuf {
     let base = std::env::var_os("XDG_STATE_HOME")
         .map(PathBuf::from)
         .unwrap_or_else(|| {
-            PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(".local/state")
+            if cfg!(windows) {
+                std::env::var_os("LOCALAPPDATA")
+                    .map(PathBuf::from)
+                    .unwrap_or_else(|| user_home().join("AppData/Local"))
+            } else {
+                user_home().join(".local/state")
+            }
         });
     let codex_home = std::env::var_os("CODEX_HOME")
         .map(PathBuf::from)
-        .unwrap_or_else(|| {
-            PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(".codex")
-        });
+        .unwrap_or_else(|| user_home().join(".codex"));
     let profile = codex_home.canonicalize().unwrap_or(codex_home);
     let hash = profile
         .to_string_lossy()
@@ -304,8 +314,22 @@ pub fn state_dir() -> PathBuf {
     // Keep the original location so renaming never splits an existing workspace.
     base.join("sessiondesk").join(format!("{hash:016x}"))
 }
+#[cfg(unix)]
 pub fn socket_path() -> PathBuf {
     state_dir().join("runtime.sock")
+}
+#[cfg(windows)]
+pub fn socket_path() -> PathBuf {
+    let path = state_dir();
+    let canonical = path.canonicalize().unwrap_or(path);
+    let hash = canonical
+        .to_string_lossy()
+        .to_lowercase()
+        .bytes()
+        .fold(0xcbf29ce484222325u64, |h, b| {
+            (h ^ b as u64).wrapping_mul(0x100000001b3)
+        });
+    PathBuf::from(format!(r"\\.\pipe\codex-deck-{hash:016x}"))
 }
 
 #[cfg(test)]

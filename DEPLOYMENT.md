@@ -1,3 +1,5 @@
+> Linux/macOS/Windows 的新增构建入口、后台实现及验证范围见 [docs/platforms.md](docs/platforms.md)。下文原有 Linux 部署流程继续适用。
+
 # Linux 部署
 
 ## 前置条件

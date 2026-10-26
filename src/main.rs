@@ -1,9 +1,11 @@
 mod activity;
+mod brand;
 mod client;
 mod daemon;
 mod layout;
 mod markup;
 mod model;
+mod platform;
 mod rpc;
 mod search;
 mod store;
@@ -14,7 +16,7 @@ async fn main() -> anyhow::Result<()> {
     match std::env::args().nth(1).as_deref() {
         Some("daemon") => daemon::run().await,
         Some("--help" | "-h") => {
-            println!("Codex Deck {} — Codex multi-session TUI\n\nUsage: codex-deck [--demo|--render-demo|status|shutdown]\n\nStart without arguments for the interactive workspace.\n/side [question] or /btw [question] opens a right-hand side conversation.\nCtrl+G, then q detaches; tasks continue in the background.\n\nEnvironment:\n  CODEX_DECK_CODEX  Codex CLI executable (default: codex)\n  CODEX_DECK_HOME   Private state directory (default: XDG state/sessiondesk)\n\nLegacy SESSIONDESK_CODEX / SESSIONDESK_HOME remain supported.\n\nRequires Codex CLI with app-server support and an interactive UTF-8 terminal.",env!("CARGO_PKG_VERSION"));
+            println!("Codex Deck {} — Codex multi-session TUI\n\nUsage: codex-deck [--demo|--render-demo|--ipc-path|status|shutdown]\n\nStart without arguments for the interactive workspace.\n/side [question] or /btw [question] opens a right-hand side conversation.\nCtrl+G, then q detaches; tasks continue in the background.\n\nEnvironment:\n  CODEX_DECK_CODEX  Codex CLI executable (default: codex)\n  CODEX_DECK_HOME   Private state directory (default: XDG state or Windows LocalAppData/sessiondesk)\n\nLegacy SESSIONDESK_CODEX / SESSIONDESK_HOME remain supported.\n\nRequires Codex CLI with app-server support and an interactive UTF-8 terminal.",env!("CARGO_PKG_VERSION"));
             Ok(())
         }
         Some("--version" | "-V") => {
@@ -22,6 +24,10 @@ async fn main() -> anyhow::Result<()> {
             Ok(())
         }
         Some("--demo") => ui::run_demo(),
+        Some("--ipc-path") => {
+            println!("{}", model::socket_path().display());
+            Ok(())
+        }
         Some("--render-demo") => ui::render_demo(),
         Some(op @ ("status" | "shutdown")) => {
             let mut c = client::Client::attach().await?;
@@ -63,7 +69,13 @@ async fn main() -> anyhow::Result<()> {
                 std::io::stdin().is_terminal(),
                 "Run Codex Deck in an interactive terminal; use --help for commands."
             );
-            ui::run(client::Client::connect().await?)
+            brand::print_startup()?;
+            // Let the banner remain readable while connection setup runs.
+            let (client, ()) = tokio::join!(
+                client::Client::connect(),
+                tokio::time::sleep(std::time::Duration::from_millis(600))
+            );
+            ui::run(client?)
         }
         Some(other) => anyhow::bail!("Unknown option {other}; use --help"),
     }

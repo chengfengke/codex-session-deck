@@ -1,17 +1,41 @@
+<p align="center">
+  <img src="assets/logo.png" alt="Codex Deck" width="200" />
+</p>
+
 # Codex Deck · 多会话 Codex TUI
 
 基于 `codex app-server` 的独立终端工作台。左侧跨目录找会话，中间继续任务，`/side` 或 `/btw` 在右侧打开持久化侧对话。切换会话或退出界面后，任务由自己的后台服务继续持有。
 
+- **会话管理**：按工作目录分组，支持筛选、置顶、归档和跨目录切换。
+- **侧对话**：在主任务旁开启只读讨论，将结论带回父会话草稿。
+- **后台任务**：保留运行状态与消息队列，通过任务总览处理待审批请求和异常。
+- **历史搜索**：搜索消息与工具文本，打开命中位置附近的上下文。
+- **灵活布局**：标签、分屏、拖动停靠与窗格缩放，最多四个可见聊天窗格。
+- **执行过程**：查看后端提供的思考摘要、计划、命令输出、工具调用及代码改动。
+
+
 ## 启动
 
-运行环境为 Linux，需要 stable Rust、C 编译器，以及已安装、已登录并支持 `app-server` 的 Codex CLI。测试还需要 Python 3。SQLite 随程序构建，无需额外数据库服务。
+提供 Linux、macOS 和 Windows 的构建与启动入口。源码构建需要 Rust 1.89 或更新 stable、C 编译器，以及已安装、已登录并支持 `app-server` 的 Codex CLI。macOS 使用 Xcode Command Line Tools，Windows 使用 MSVC 工具链与 Visual Studio C++ Build Tools。测试还需要 Python 3。SQLite 随程序构建，无需额外数据库服务。
+
+Linux / macOS：
 
 ```sh
 git clone https://github.com/chengfengke/codex-session-deck.git
 cd codex-session-deck
+chmod +x codex-deck scripts/*.sh
 sh scripts/build.sh
 ./codex-deck
 ```
+
+Windows PowerShell（在项目目录中）：
+
+```powershell
+.\scripts\build.ps1
+.\codex-deck.ps1
+```
+
+可使用 `--demo` 查看离线演示，或使用 `--render-demo` 输出字符预览；两者均不发起模型请求。各平台的构建要求与状态目录见 [跨平台说明](docs/platforms.md)。
 
 仓库保存源代码，构建结果生成在 `bin/`。启动器按 CPU 选择对应程序；缺少程序且已安装 Cargo 时会自动构建。也可将命令安装到 Cargo 的 bin 目录，在任意工作目录启动：
 
@@ -20,9 +44,9 @@ cargo install --path . --locked
 codex-deck
 ```
 
-请将 Cargo 的 bin 目录加入 `PATH`。直接安装的命令采用用户 XDG 状态目录；项目启动器默认采用项目的 `.state/`。如需两种入口共享后台和数据，请在两种入口中设置相同的 `CODEX_DECK_HOME`，并在迁移前关闭空闲后台。
+请将 Cargo 的 bin 目录加入 `PATH`。直接安装的命令在 Linux/macOS 使用用户 XDG 状态目录，在 Windows 使用 LocalAppData。Linux 项目启动器默认采用项目的 `.state/`，macOS/Windows 启动器使用用户状态目录。如需两种入口共享后台和数据，请在两种入口中设置相同的 `CODEX_DECK_HOME`，并在迁移前关闭空闲后台。
 
-默认使用 `PATH` 中的 `codex`，也会检测用户本地 bin 目录。可通过环境变量选择 CLI 或状态目录，例如：
+默认使用 `PATH` 中的 `codex`；Unix 启动器也会检测用户本地 bin 目录，Windows 支持查找 `codex.exe` 与 `codex.cmd`。可通过环境变量选择 CLI 或状态目录，例如：
 
 ```sh
 CODEX_DECK_CODEX="$(command -v codex)" ./codex-deck
@@ -105,7 +129,7 @@ CODEX_DECK_HOME="$PWD/.state/custom" ./codex-deck
 
 兼容原 `sessiondesk` 与 `start.sh` 启动入口、`SESSIONDESK_HOME` / `SESSIONDESK_CODEX` 环境变量；新旧名称共用同一后台与数据。新的 `CODEX_DECK_*` 变量优先。状态目录中的 `sessiondesk` 名称保留以兼容已有数据。
 
-直接运行二进制时，状态保存在 XDG 用户状态目录下的 `sessiondesk/<Codex-home指纹>/`；项目启动器默认将 `XDG_STATE_HOME` 设为项目内的 `.state/`，含 SQLite 数据库、后台日志与 Unix socket。目录权限为 0700，socket 为 0600。不同 `CODEX_HOME` 默认使用独立状态空间。可通过 `CODEX_DECK_HOME` 指定独立状态目录；同一目录只能对应一个后端配置。
+直接运行二进制时，Linux/macOS 使用 XDG 用户状态目录下的 `sessiondesk/<Codex-home指纹>/`，Windows 使用 `%LOCALAPPDATA%/sessiondesk/<Codex-home指纹>/`。Linux 项目启动器默认将 `XDG_STATE_HOME` 设为项目内的 `.state/`。目录中保存 SQLite 数据库与后台日志；Linux/macOS 使用 Unix socket，Windows 使用仅当前用户可访问、拒绝远程客户端的命名管道。Unix 目录权限为 0700，socket 为 0600；Windows 数据文件继承状态目录 ACL。不同 `CODEX_HOME` 默认使用独立状态空间。可通过 `CODEX_DECK_HOME` 指定独立状态目录；同一目录只能对应一个后端配置。
 
 选中历史会话时只读获取记录，不获取执行写锁；已有 CLI 占用会话时也可浏览历史。明确发送任务时才恢复执行连接；如果该会话仍被其他进程占用，发送会返回写锁冲突，不自动转移或抢占。
 
@@ -129,16 +153,16 @@ Codex 负责对话与执行；本程序保存布局、项目、置顶、草稿�
 
 搜索按原文子串匹配，不区分大小写，不解释正则或通配符。首次搜索在后台分页建立索引，显示进度并逐步提供结果；后续复用未变化的历史。最多显示 100 条命中，缩小关键词范围可查看其他结果。Ctrl+R 刷新，Esc 取消；读取失败的历史会显示错误数量，避免将不完整结果当作完整搜索。搜索期间可取消后继续使用其他功能。
 
-索引位于本程序状态目录的 `message-search.sqlite`，保存已读取的消息文本，文件权限为 0600，目录权限为 0700。搜索只读历史，不恢复执行写锁，也不提交模型请求。未发送草稿不进入搜索。搜索范围取决于所选 Codex home 和后端能够列出、读取的记录；不涵盖其他账号、其他机器或未落盘的实时输出。同一后台一次运行一个搜索，新搜索替换前一次。
+索引位于本程序状态目录的 `message-search.sqlite`，保存已读取的消息文本，Unix 文件权限为 0600，目录权限为 0700；Windows 文件继承状态目录 ACL。搜索只读历史，不恢复执行写锁，也不提交模型请求。未发送草稿不进入搜索。搜索范围取决于所选 Codex home 和后端能够列出、读取的记录；不涵盖其他账号、其他机器或未落盘的实时输出。同一后台一次运行一个搜索，新搜索替换前一次。
 
-## Linux 构建
+## 构建
 
 ```sh
 sh scripts/build.sh
 ./codex-deck
 ```
 
-脚本从自身位置定位项目根目录，可在其他工作目录调用。构建产物为 `bin/codex-deck-linux-<arm64|x64>`，兼容入口仍为 `sessiondesk` 与 `start.sh`。构建尊重调用者的 Rust 和 C 编译器配置；`scripts/build-server.sh` 可复用项目内已有的私有工具链，或使用系统工具链。
+脚本从自身位置定位项目根目录，可在其他工作目录调用。Linux/macOS 构建产物为 `bin/codex-deck-<linux|macos>-<arm64|x64>`，兼容入口仍为 `sessiondesk` 与 `start.sh`。Windows 使用 `scripts/build.ps1`，产物为 `bin/codex-deck-windows-<x64|arm64>.exe`。构建尊重调用者的 Rust 和 C 编译器配置；`scripts/build-server.sh` 可复用项目内已有的私有工具链，或使用系统工具链。
 
 ## 验证
 
@@ -147,6 +171,8 @@ cargo fmt --check
 cargo clippy --locked --all-targets -- -D warnings
 cargo test --locked
 cargo build --locked
+python3 tests/platform_smoke.py
+# 以下脚本使用 Unix socket / PTY，适用于 Linux/macOS：
 python3 tests/integration.py
 python3 tests/responsiveness.py
 python3 tests/manager_pty.py
@@ -162,7 +188,7 @@ python3 tests/real_smoke.py
 
 `tests/fake_codex.py` 只用于确定性集成验证，正常启动始终连接真实 Codex。`--demo` 是明确标记的离线界面演示，`--render-demo` 输出字符预览。
 
-验证覆盖 Linux x86_64 上的编译、单元测试、Unix socket / SQLite / JSON-RPC 集成、PTY 终端操作，以及真实 Codex 的握手、模型列表和跨目录会话列表。真实后端测试只读历史和配置，不提交模型任务。版本为 0.1.0 开发版。
+验证包括编译、单元测试、本地 IPC、SQLite / JSON-RPC 集成，以及终端操作。macOS Apple Silicon 已通过本机编译、24 项单元测试、模拟后端集成与 PTY 冒烟测试；原项目的 Linux x86_64 验证记录保留，当前跨平台代码在 Linux 和 Windows 的原生运行仍待验证。GitHub Actions 配置了三平台构建与测试。真实后端联通测试只读历史和配置，不提交模型任务。版本为 0.1.0 开发版。
 
 历史排版按消息缓存，只绘制可见行；连续输入合并处理，空闲时不重复重画。TUI 订阅增量快照，编辑草稿和布局不再重复传输全部会话历史。首次加载及继续分页在后台并行执行，显示 `loading history…`，不会阻止切换其他会话。
 

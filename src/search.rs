@@ -22,8 +22,7 @@ static INDEX_WRITER: Mutex<()> = Mutex::new(());
 fn database() -> Result<Connection> {
     let path = state_dir().join("message-search.sqlite");
     let db = Connection::open(&path)?;
-    use std::os::unix::fs::PermissionsExt;
-    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;
+    crate::platform::private_permissions(&path, 0o600)?;
     db.execute_batch("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=3000;
         CREATE TABLE IF NOT EXISTS threads(id TEXT PRIMARY KEY,title TEXT,cwd TEXT,archived INTEGER,stamp TEXT,updated INTEGER,visible INTEGER);
         CREATE TABLE IF NOT EXISTS docs(thread TEXT,mid TEXT,turn_id TEXT,turn_order INTEGER,item_order INTEGER,role TEXT,body TEXT,folded TEXT,UNIQUE(thread,mid));

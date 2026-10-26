@@ -1,5 +1,5 @@
- ◆ Codex Deck  DEMO  ·  2 running  ·  0 requests                                                                                          [ Approvals ] [ Help ]
-[ Tasks ]  [ Find messages ]  [ Hide side ]
+ ⠇ ⠸  Codex Deck  DEMO  ·  2 running  ·  0 requests                                                                                       [ Approvals ] [ Help ]
+ ⠢⣀⠔  [ Tasks ]  [ Find messages ]  [ Hide side ]
  CONVERSATIONS              │ Implement login                                                              │ Side · failure cases
  + New conversation         │ Execute / workspace write · gpt-5.4 · running                                │ Discussion / read only · gpt-5.4 · completed · /p…
  Active · show archived     │ cwd for next task: examples/platform                                         │ cwd for next task: examples/platform

@@ -36,7 +36,11 @@ impl Rpc {
         let exe = std::env::var("CODEX_DECK_CODEX")
             .or_else(|_| std::env::var("SESSIONDESK_CODEX"))
             .unwrap_or_else(|_| "codex".into());
-        let mut child = Command::new(&exe)
+        let exe = executable(&exe);
+        let mut command = Command::new(&exe);
+        #[cfg(windows)]
+        command.creation_flags(0x08000000);
+        let mut child = command
             .args(["app-server", "--stdio"])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -105,6 +109,23 @@ impl Rpc {
     pub async fn stop(&mut self) {
         let _ = self.child.kill().await;
     }
+}
+
+fn executable(exe: &str) -> String {
+    #[cfg(windows)]
+    if exe == "codex" {
+        if let Some(path) = std::env::var_os("PATH") {
+            for directory in std::env::split_paths(&path) {
+                for name in ["codex.exe", "codex.cmd", "codex.bat"] {
+                    let candidate = directory.join(name);
+                    if candidate.is_file() {
+                        return candidate.to_string_lossy().into_owned();
+                    }
+                }
+            }
+        }
+    }
+    exe.into()
 }
 impl RpcHandle {
     pub async fn call(&self, method: &str, params: Value) -> Result<Value> {

@@ -10,7 +10,6 @@ use serde_json::{json, Value};
 use std::{
     collections::HashMap,
     fs::OpenOptions,
-    os::{fd::AsRawFd, unix::fs::PermissionsExt},
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -20,7 +19,6 @@ use std::{
 };
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
-    net::{UnixListener, UnixStream},
     sync::{mpsc, oneshot, watch},
 };
 
@@ -61,12 +59,12 @@ pub async fn run() -> Result<()> {
         .truncate(false)
         .write(true)
         .open(state_dir().join("daemon.lock"))?;
-    if unsafe { libc::flock(lock.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } != 0 {
-        return Ok(());
+    match lock.try_lock() {
+        Ok(()) => {}
+        Err(std::fs::TryLockError::WouldBlock) => return Ok(()),
+        Err(std::fs::TryLockError::Error(error)) => return Err(error.into()),
     }
-    let _ = std::fs::remove_file(socket_path());
-    let listener = UnixListener::bind(socket_path())?;
-    std::fs::set_permissions(socket_path(), std::fs::Permissions::from_mode(0o600))?;
+    let mut listener = crate::platform::Listener::bind()?;
     let mut data = store.load()?;
     for c in data.conversations.values_mut() {
         c.loaded = false;
@@ -98,7 +96,7 @@ pub async fn run() -> Result<()> {
     };
     let (wtx, wrx) = watch::channel(host.snap.clone());
     tokio::spawn(async move {
-        while let Ok((stream, _)) = listener.accept().await {
+        while let Ok(stream) = listener.accept().await {
             let tx = ctx.clone();
             let rx = wrx.clone();
             tokio::spawn(async move {
@@ -145,18 +143,18 @@ pub async fn run() -> Result<()> {
             },
             _=paint.tick()=>{if host.dirty{host.snap.seq+=1;wtx.send_replace(host.snap.clone());host.dirty=false;}},
             _=save.tick()=>{if saved_seq!=host.snap.seq{if let Err(e)=host.store.save(&host.snap.data){host.snap.error=format!("State save failed: {e}");host.dirty=true;}else{saved_seq=host.snap.seq;}}},
-            _=tokio::signal::ctrl_c()=>{if let Some(cancel)=host.search_cancel.take(){cancel.store(true,Ordering::Relaxed);}host.store.save(&host.snap.data)?;break;}
+            _=crate::platform::shutdown_signal()=>{if let Some(cancel)=host.search_cancel.take(){cancel.store(true,Ordering::Relaxed);}host.store.save(&host.snap.data)?;break;}
         }
     }
-    let _ = std::fs::remove_file(socket_path());
+    crate::platform::cleanup();
     Ok(())
 }
 async fn serve(
-    stream: UnixStream,
+    stream: crate::platform::Stream,
     tx: mpsc::Sender<Command>,
     mut snapshots: watch::Receiver<Snapshot>,
 ) -> Result<()> {
-    let (r, mut w) = stream.into_split();
+    let (r, mut w) = tokio::io::split(stream);
     let mut lines = BufReader::new(r).lines();
     let mut previous = snapshots.borrow_and_update().clone();
     let mut delta = false;
@@ -198,7 +196,7 @@ async fn serve(
     }
     Ok(())
 }
-async fn write(w: &mut tokio::net::unix::OwnedWriteHalf, v: &Value) -> Result<()> {
+async fn write<W: tokio::io::AsyncWrite + Unpin>(w: &mut W, v: &Value) -> Result<()> {
     let mut b = serde_json::to_vec(v)?;
     b.push(b'\n');
     w.write_all(&b).await?;

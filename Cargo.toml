@@ -2,6 +2,7 @@
 name = "codex-deck"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.89"
 description = "A persistent multi-session terminal workspace for Codex"
 license = "MIT"
 

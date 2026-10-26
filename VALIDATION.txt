@@ -1,0 +1,19 @@
+Cross-platform adaptation validation
+
+macOS arm64, Rust 1.99.1:
+- cargo test --locked --offline: 24 passed, 1 manual benchmark ignored.
+- cargo clippy --locked --offline --all-targets -- -D warnings: passed.
+- release build via scripts/build.sh: passed.
+- original integration.py with fake backend: passed.
+- original pty_smoke.py: passed.
+- platform_smoke.py: passed (debug and release binary).
+- launcher --version / --render-demo: passed on macOS.
+
+Linux and Windows:
+- Platform-specific adapters and launch/build scripts included.
+- GitHub Actions matrix configured; not executed from this local ZIP.
+- No Windows or Linux native binaries supplied; native execution not verified here.
+
+Included executable: bin/codex-deck-macos-arm64 (Apple Silicon macOS).
+For Intel macOS/Linux/Windows, build on that platform with current stable Rust and C build tools.
+All backend validation used the fake Codex fixture; no real model requests.

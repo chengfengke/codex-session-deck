@@ -2595,7 +2595,8 @@ impl App {
             "OFFLINE"
         };
         let header = Line::from(vec![
-            Span::styled(" ◆ Codex Deck ", style(ACCENT).add_modifier(Modifier::BOLD)),
+            Span::styled(crate::brand::eyes(), style(ACCENT)),
+            Span::styled(" Codex Deck ", style(ACCENT).add_modifier(Modifier::BOLD)),
             Span::styled(
                 format!(
                     " {status}  ·  {running} running  ·  {} requests",
@@ -2608,6 +2609,10 @@ impl App {
             Paragraph::new(header).style(Style::default().bg(PANEL)),
             Rect::new(0, 0, area.width, 2),
         );
+        f.render_widget(
+            Paragraph::new(crate::brand::smile()).style(style(ACCENT)),
+            Rect::new(0, 1, 5, 1),
+        );
         if area.width > 72 {
             let r = Rect::new(area.width - 22, 0, 22, 1);
             f.render_widget(
@@ -2618,10 +2623,10 @@ impl App {
             self.hits.push((Rect::new(r.x + 14, 0, 8, 1), Hit::Help));
         }
         for (x, label, hit) in [
-            (0, "[ Tasks ]", Hit::Tasks),
-            (11, "[ Find messages ]", Hit::Find),
+            (6, "[ Tasks ]", Hit::Tasks),
+            (17, "[ Find messages ]", Hit::Find),
             (
-                30,
+                36,
                 if self.side_visible() {
                     "[ Hide side ]"
                 } else {

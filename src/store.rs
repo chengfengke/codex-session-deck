@@ -1,7 +1,6 @@
 use crate::model::{state_dir, Persisted};
 use anyhow::Result;
 use rusqlite::{params, Connection};
-use std::os::unix::fs::PermissionsExt;
 
 pub struct Store {
     db: Connection,
@@ -10,7 +9,7 @@ impl Store {
     pub fn open() -> Result<Self> {
         let dir = state_dir();
         std::fs::create_dir_all(&dir)?;
-        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700))?;
+        crate::platform::private_permissions(&dir, 0o700)?;
         let db = Connection::open(dir.join("state.sqlite"))?;
         db.execute_batch("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=3000; CREATE TABLE IF NOT EXISTS state (id INTEGER PRIMARY KEY CHECK(id=1), version INTEGER NOT NULL, payload TEXT NOT NULL);")?;
         Ok(Self { db })

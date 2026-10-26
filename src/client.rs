@@ -1,10 +1,9 @@
-use crate::model::{socket_path, state_dir};
+use crate::{model::state_dir, platform};
 use anyhow::{Context, Result};
 use serde_json::{json, Value};
-use std::{os::unix::process::CommandExt, process::Stdio, sync::mpsc as sync};
+use std::{process::Stdio, sync::mpsc as sync};
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
-    net::UnixStream,
     sync::mpsc,
 };
 
@@ -27,7 +26,7 @@ impl Client {
         Self::connect_mode(false).await
     }
     async fn connect_mode(start: bool) -> Result<Self> {
-        let stream = match UnixStream::connect(socket_path()).await {
+        let stream = match platform::connect().await {
             Ok(s) => s,
             Err(e) => {
                 if !start {
@@ -43,18 +42,11 @@ impl Client {
                     .stdin(Stdio::null())
                     .stdout(Stdio::null())
                     .stderr(log);
-                unsafe {
-                    cmd.pre_exec(|| {
-                        if libc::setsid() < 0 {
-                            return Err(std::io::Error::last_os_error());
-                        }
-                        Ok(())
-                    });
-                }
+                platform::detach(&mut cmd);
                 cmd.spawn().context("cannot launch background service")?;
                 let mut found = None;
                 for _ in 0..100 {
-                    if let Ok(s) = UnixStream::connect(socket_path()).await {
+                    if let Ok(s) = platform::connect().await {
                         found = Some(s);
                         break;
                     }
@@ -63,7 +55,7 @@ impl Client {
                 found.context("daemon did not start; inspect daemon.log in CODEX_DECK_HOME (or legacy SESSIONDESK_HOME)")?
             }
         };
-        let (read, mut write) = stream.into_split();
+        let (read, mut write) = tokio::io::split(stream);
         let (tx, mut outgoing) = mpsc::unbounded_channel::<Value>();
         let (incoming, rx) = sync::channel();
         tx.send(json!({"id":0,"op":"subscribe","args":{"delta":true}}))?;
