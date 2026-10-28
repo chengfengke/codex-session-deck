@@ -125,7 +125,9 @@ enum Modal {
         selected: usize,
         edge: usize,
     },
-    Help,
+    Help {
+        scroll: u16,
+    },
 }
 #[derive(Clone)]
 enum Hit {
@@ -1084,7 +1086,7 @@ impl App {
             .unwrap_or(0);
         match k.code {
             KeyCode::Char('d') if ctrl => self.quit = true,
-            KeyCode::F(1) => self.modal = Some(Modal::Help),
+            KeyCode::F(1) => self.modal = Some(Modal::Help { scroll: 0 }),
             KeyCode::Tab | KeyCode::BackTab => {
                 let key = self.focus.clone();
                 self.focus(&key);
@@ -1651,7 +1653,7 @@ impl App {
             }
             "/close" => self.close(),
             "/quit" => self.quit = true,
-            "/help" => self.modal = Some(Modal::Help),
+            "/help" => self.modal = Some(Modal::Help { scroll: 0 }),
             _ => {
                 self.notice("Unknown command · /help lists commands. Start with // to send a literal slash.");
                 return;
@@ -1864,7 +1866,7 @@ impl App {
                 KeyCode::Down | KeyCode::Char('j') => self.direction(0, 1),
                 KeyCode::Char('[') => self.tab(-1),
                 KeyCode::Char(']') => self.tab(1),
-                KeyCode::Char('?') => self.modal = Some(Modal::Help),
+                KeyCode::Char('?') => self.modal = Some(Modal::Help { scroll: 0 }),
                 KeyCode::Char(':') => {
                     self.prompt("Command · /help lists all commands", "command", "/")
                 }
@@ -1954,7 +1956,7 @@ impl App {
             }
             KeyCode::Tab => self.tab(1),
             KeyCode::BackTab => self.tab(-1),
-            KeyCode::F(1) => self.modal = Some(Modal::Help),
+            KeyCode::F(1) => self.modal = Some(Modal::Help { scroll: 0 }),
             KeyCode::Char(c) if !ctrl && !k.modifiers.contains(KeyModifiers::ALT) => {
                 self.insert(&c.to_string())
             }
@@ -2111,11 +2113,16 @@ impl App {
                     _ => {}
                 }
             }
-            Modal::Help => {
-                if matches!(k.code, KeyCode::Enter | KeyCode::Char('q') | KeyCode::F(1)) {
-                    keep = false
-                }
-            }
+            Modal::Help { scroll } => match k.code {
+                KeyCode::Down | KeyCode::Char('j') => *scroll = scroll.saturating_add(1),
+                KeyCode::Up | KeyCode::Char('k') => *scroll = scroll.saturating_sub(1),
+                KeyCode::PageDown => *scroll = scroll.saturating_add(15),
+                KeyCode::PageUp => *scroll = scroll.saturating_sub(15),
+                KeyCode::Home => *scroll = 0,
+                KeyCode::End => *scroll = u16::MAX,
+                KeyCode::Enter | KeyCode::Char('q') | KeyCode::F(1) => keep = false,
+                _ => {}
+            },
             Modal::Text { scroll, .. } => match k.code {
                 KeyCode::Down | KeyCode::Char('j') => *scroll = scroll.saturating_add(1),
                 KeyCode::Up | KeyCode::Char('k') => *scroll = scroll.saturating_sub(1),
@@ -2359,6 +2366,18 @@ impl App {
     }
     fn mouse(&mut self, m: MouseEvent) {
         if self.modal.is_some() {
+            if matches!(self.modal, Some(Modal::Help { .. })) {
+                match m.kind {
+                    MouseEventKind::ScrollUp => {
+                        self.modal_key(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE))
+                    }
+                    MouseEventKind::ScrollDown => {
+                        self.modal_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE))
+                    }
+                    _ => {}
+                }
+                return;
+            }
             if matches!(self.modal, Some(Modal::Find { .. } | Modal::Tasks { .. })) {
                 match m.kind {
                     MouseEventKind::ScrollUp => {
@@ -2472,7 +2491,7 @@ impl App {
                             self.toggle_directory(&path);
                         }
                         Hit::Side => self.side(String::new()),
-                        Hit::Help => self.modal = Some(Modal::Help),
+                        Hit::Help => self.modal = Some(Modal::Help { scroll: 0 }),
                         Hit::Pending => self.pending(),
                         Hit::Sidebar => self.drag = Some(Drag::Sidebar),
                     }
@@ -3435,6 +3454,7 @@ impl App {
         let title: String;
         let mut lines: Vec<Line> = vec![];
         let mut offset = 0;
+        let is_help = matches!(&m, Modal::Help { .. });
         match m {
             Modal::Find {
                 query,
@@ -3460,8 +3480,9 @@ impl App {
                 self.draw_models(f, r, &thread, &query, selected);
                 return;
             }
-            Modal::Help => {
-                title = "Codex Deck · keyboard & commands · Esc closes".into();
+            Modal::Help { scroll } => {
+                title = "Codex Deck · keyboard & commands · PgUp/PgDn · Esc closes".into();
+                offset = scroll;
                 for line in HELP.lines() {
                     lines.push(Line::styled(line.to_string(), style(FG)));
                 }
@@ -3681,13 +3702,19 @@ impl App {
             .title(short(&title, w.saturating_sub(2) as usize))
             .padding(ratatui::widgets::Padding::uniform(1))
             .style(Style::default().bg(PANEL).fg(FG));
-        f.render_widget(
-            Paragraph::new(Text::from(lines))
-                .block(block)
-                .wrap(Wrap { trim: false })
-                .scroll((offset, 0)),
-            r,
-        );
+        let inner = block.inner(r);
+        let paragraph = Paragraph::new(Text::from(lines)).wrap(Wrap { trim: false });
+        if is_help {
+            let max_scroll = paragraph
+                .line_count(inner.width)
+                .saturating_sub(inner.height as usize)
+                .min(u16::MAX as usize) as u16;
+            offset = offset.min(max_scroll);
+            if let Some(Modal::Help { scroll }) = &mut self.modal {
+                *scroll = offset;
+            }
+        }
+        f.render_widget(paragraph.block(block).scroll((offset, 0)), r);
     }
 }
 fn pop(s: &mut String) {
@@ -3759,7 +3786,7 @@ fn cursor_cell(s: &str, width: u16) -> (u16, u16) {
     }
     (x, y)
 }
-const HELP:&str="GET STARTED\nCtrl+G n  New draft       Ctrl+G p  Focus left filter\nEnter sends; during a task it queues the next message.\nCtrl+J newline · paste supports multiline · Ctrl+C stop focused task\nCtrl+G q / Ctrl+D detaches. Background tasks keep running.\n\nCONVERSATION MANAGER\nLeft: directories and chats · middle: main · right: side\nClick a chat to open; click a directory to fold/unfold.\nCtrl+G p focuses the inline filter · arrows select · Enter open\nEsc clears the filter · Tab returns to chat · Ctrl+G f quick switch\n\nWORKSPACE · press Ctrl+G, release, then the key\ns side · o hide/show right · b sidebar · arrows / h j k l focus\nt tasks · / find message text · [ ] cycle tabs\nm move / dock · r resize with arrows · z maximize / restore\nw close view · u undo layout · a approvals · d diff · : command\nDrag tabs or sidebar rows onto pane edges or center (tab group).\nDrag dividers to resize; drag sidebar rows to reorder.\nPgUp/PgDn or wheel scroll; PgDn returns toward live output.\n\nCOMMANDS\n/side [question]  /btw [question]   open side on the right\n/side-panel [show|hide]  /find [text]  /live  /tasks\n/new [directory]  /search  /quick-switch  /archived  /rename [title]  /pin\n/model [id]  /models  /cwd [directory]  /project [name]\n/permissions read-only|workspace-write  /worktree path ref\n/queue [clear|release]  /steer message  /stop  /history\n/send-parent [text]  /parent  /promote  /move  /close\n/diff  /approvals  /archive  /restore  /refresh\n/login  /reconnect  /quit  /help\nPrefix a literal slash message with // . Esc cancels dialogs.";
+pub(crate) const HELP: &str = include_str!("../assets/help.txt");
 
 struct Guard;
 impl Drop for Guard {
@@ -3983,6 +4010,157 @@ mod tests {
     fn draw_at(app: &mut App, width: u16) {
         let mut terminal = Terminal::new(ratatui::backend::TestBackend::new(width, 32)).unwrap();
         terminal.draw(|f| app.draw(f)).unwrap();
+    }
+    fn press(app: &mut App, code: KeyCode) {
+        app.key(KeyEvent::new(code, KeyModifiers::NONE));
+    }
+    fn shortcut(app: &mut App, code: KeyCode) {
+        app.key(KeyEvent::new(KeyCode::Char('g'), KeyModifiers::CONTROL));
+        press(app, code);
+    }
+    fn screen(terminal: &Terminal<ratatui::backend::TestBackend>) -> String {
+        terminal
+            .backend()
+            .buffer()
+            .content
+            .iter()
+            .map(|c| c.symbol())
+            .collect()
+    }
+    #[test]
+    fn help_scrolls_to_all_commands_and_clamps_after_resize() {
+        let mut app = demo();
+        let original_draft = app.drafts["demo-main"].text.clone();
+        let mut terminal = Terminal::new(ratatui::backend::TestBackend::new(80, 24)).unwrap();
+        press(&mut app, KeyCode::F(1));
+        terminal.draw(|f| app.draw(f)).unwrap();
+        assert!(!screen(&terminal).contains("/login"));
+        press(&mut app, KeyCode::PageDown);
+        terminal.draw(|f| app.draw(f)).unwrap();
+        assert!(matches!(app.modal, Some(Modal::Help { scroll }) if scroll > 0));
+        press(&mut app, KeyCode::End);
+        terminal.draw(|f| app.draw(f)).unwrap();
+        assert!(screen(&terminal).contains("/login"));
+        assert!(screen(&terminal).contains("/reconnect"));
+        assert!(screen(&terminal).contains("Esc cancels dialogs"));
+        // Saturating End must not leave the help blank after a window resize.
+        terminal.backend_mut().resize(100, 40);
+        terminal.autoresize().unwrap();
+        terminal.draw(|f| app.draw(f)).unwrap();
+        assert!(screen(&terminal).contains("/login"));
+        press(&mut app, KeyCode::Home);
+        terminal.draw(|f| app.draw(f)).unwrap();
+        assert!(screen(&terminal).contains("GET STARTED"));
+        app.mouse(MouseEvent {
+            kind: MouseEventKind::ScrollDown,
+            column: 10,
+            row: 8,
+            modifiers: KeyModifiers::NONE,
+        });
+        assert!(matches!(app.modal, Some(Modal::Help { scroll: 1 })));
+        press(&mut app, KeyCode::Esc);
+        assert!(app.modal.is_none());
+        assert_eq!(app.drafts["demo-main"].text, original_draft);
+        for key in [KeyCode::Enter, KeyCode::Char('q'), KeyCode::F(1)] {
+            app.command("/help");
+            press(&mut app, key);
+            assert!(app.modal.is_none());
+        }
+    }
+    #[test]
+    fn documented_commands_are_recognized() {
+        let commands: BTreeSet<_> = HELP
+            .split_whitespace()
+            .filter(|token| {
+                token.starts_with('/')
+                    && token.as_bytes().get(1).is_some_and(u8::is_ascii_alphabetic)
+            })
+            .collect();
+        assert!(commands.len() >= 30);
+        for command in commands {
+            let mut app = demo();
+            app.command(command);
+            assert!(!app.toast.starts_with("Unknown command"), "{command}");
+        }
+    }
+    #[test]
+    fn documented_prefixes_open_their_controls_and_preserve_drafts() {
+        for key in [
+            'n', 'p', '/', 't', 'o', 'f', 'b', 's', 'a', 'd', 'm', 'r', 'w', 'z', 'u', '?', ':',
+            'q',
+        ] {
+            let mut app = demo();
+            let (client, _, mut out) = Client::fixture();
+            app.client = Some(client);
+            draw_at(&mut app, 100);
+            let draft = app.drafts["demo-main"].text.clone();
+            if key == 'a' {
+                app.snap.pending.push(Pending {
+                    id: json!(1),
+                    method: "command/requestApproval".into(),
+                    params: json!({}),
+                    thread: "demo-main".into(),
+                    generation: 1,
+                });
+            }
+            shortcut(&mut app, KeyCode::Char(key));
+            match key {
+                'n' => assert!(matches!(app.modal, Some(Modal::New { .. }))),
+                'p' => assert!(app.manager_focused && app.manager_filtering),
+                '/' => assert!(matches!(app.modal, Some(Modal::Find { .. }))),
+                't' => assert!(matches!(app.modal, Some(Modal::Tasks { .. }))),
+                'o' => assert!(!app.side_visible()),
+                'f' => assert!(matches!(app.modal, Some(Modal::Search { .. }))),
+                'b' => assert!(!app.sidebar),
+                's' | 'd' => assert!(std::iter::from_fn(|| out.try_recv().ok())
+                    .any(|v| v["op"] == if key == 's' { "side" } else { "diff" })),
+                'a' => assert!(matches!(app.modal, Some(Modal::Pending { .. }))),
+                'm' => assert!(matches!(app.modal, Some(Modal::Move { .. }))),
+                'r' => assert!(app.resize),
+                'w' => assert_eq!(app.focus, "demo-side"),
+                'z' => assert!(app.maximize.is_some()),
+                'u' => assert!(!app.prefix),
+                '?' => assert!(matches!(app.modal, Some(Modal::Help { .. }))),
+                ':' => assert!(matches!(app.modal, Some(Modal::Prompt { .. }))),
+                'q' => assert!(app.quit),
+                _ => unreachable!(),
+            }
+            assert_eq!(app.drafts["demo-main"].text, draft, "prefix {key}");
+        }
+    }
+    #[test]
+    fn navigation_resize_and_editing_shortcuts_work_without_submitting() {
+        let mut app = demo();
+        let (client, _, mut out) = Client::fixture();
+        app.client = Some(client);
+        draw_at(&mut app, 100);
+        shortcut(&mut app, KeyCode::Right);
+        assert_eq!(app.focus, "demo-side");
+        shortcut(&mut app, KeyCode::Char('h'));
+        assert_eq!(app.focus, "demo-main");
+        let before = app.layout.clone();
+        shortcut(&mut app, KeyCode::Char('r'));
+        press(&mut app, KeyCode::Right);
+        assert_ne!(app.layout, before);
+        press(&mut app, KeyCode::Enter);
+        assert!(!app.resize);
+        app.layout.dock("demo-api", "demo-main", "center");
+        draw_at(&mut app, 100);
+        shortcut(&mut app, KeyCode::Char(']'));
+        assert_eq!(app.focus, "demo-api");
+        shortcut(&mut app, KeyCode::Char('['));
+        assert_eq!(app.focus, "demo-main");
+        press(&mut app, KeyCode::Tab);
+        assert_eq!(app.focus, "demo-api");
+        press(&mut app, KeyCode::BackTab);
+        assert_eq!(app.focus, "demo-main");
+        app.key(KeyEvent::new(KeyCode::Char('j'), KeyModifiers::CONTROL));
+        assert!(app.drafts["demo-main"].text.ends_with('\n'));
+        assert!(!std::iter::from_fn(|| out.try_recv().ok()).any(|v| v["op"] == "send"));
+        app.key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL));
+        assert!(std::iter::from_fn(|| out.try_recv().ok()).any(|v| v["op"] == "stop"));
+        app.key(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::CONTROL));
+        assert!(app.quit);
     }
     #[test]
     fn startup_hides_saved_side_views_without_discarding_them() {

@@ -1,0 +1,35 @@
+GET STARTED
+F1 or /help opens this guide. Arrows / PgUp/PgDn / wheel scroll.
+Home / End jump to first / last page; Esc, Enter, q or F1 closes.
+Ctrl+G n  New draft       Ctrl+G p  Focus left filter
+Enter sends; during a task it queues the next message.
+Ctrl+J newline · paste supports multiline · Ctrl+C stop focused task
+Ctrl+G q / Ctrl+D detaches. Background tasks keep running.
+
+CONVERSATION MANAGER
+Left: directories and chats · middle: main · right: side
+Click a chat to open; click a directory to fold/unfold.
+Ctrl+G p focuses the inline filter · arrows select · Enter open
+Esc clears the filter · Tab returns to chat · Ctrl+G f quick switch
+
+WORKSPACE · press Ctrl+G, release, then the key
+s side · o hide/show right · b sidebar · arrows / h j k l focus
+t tasks · / find message text · [ ] cycle tabs · ? help
+m move / dock · r resize with arrows · z maximize / restore
+w close view · u undo layout · a approvals · d diff · : command
+Drag tabs or sidebar rows onto pane edges or center (tab group).
+Drag dividers to resize; drag sidebar rows to reorder.
+Tab / Shift+Tab also cycle tabs within the focused chat pane.
+PgUp/PgDn or wheel scroll; PgDn returns toward live output.
+
+COMMANDS
+/side [question]  /btw [question]   open side on the right
+/side-panel [show|hide]  /find [text]  /live  /tasks
+/new [directory]  /search  /quick-switch  /archived  /rename [title]  /pin
+/model [id]  /models  /cwd [directory]  /project [name]
+/permissions read-only|workspace-write  /worktree path ref
+/queue [clear|release]  /steer message  /stop  /history
+/send-parent [text]  /parent  /promote  /move  /close
+/diff  /approvals  /archive  /restore  /refresh
+/login  /reconnect  /quit  /help
+Prefix a literal slash message with // . Esc cancels dialogs.

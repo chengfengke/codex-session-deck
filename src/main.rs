@@ -16,7 +16,8 @@ async fn main() -> anyhow::Result<()> {
     match std::env::args().nth(1).as_deref() {
         Some("daemon") => daemon::run().await,
         Some("--help" | "-h") => {
-            println!("Codex Deck {} — Codex multi-session TUI\n\nUsage: codex-deck [--demo|--render-demo|--ipc-path|status|shutdown]\n\nStart without arguments for the interactive workspace.\n/side [question] or /btw [question] opens a right-hand side conversation.\nCtrl+G, then q detaches; tasks continue in the background.\n\nEnvironment:\n  CODEX_DECK_CODEX  Codex CLI executable (default: codex)\n  CODEX_DECK_HOME   Private state directory (default: XDG state or Windows LocalAppData/sessiondesk)\n\nLegacy SESSIONDESK_CODEX / SESSIONDESK_HOME remain supported.\n\nRequires Codex CLI with app-server support and an interactive UTF-8 terminal.",env!("CARGO_PKG_VERSION"));
+            println!("Codex Deck {} — Codex multi-session TUI\n\nUsage: codex-deck [--help|--version|--demo|--render-demo|--ipc-path|status|shutdown]\n\nStart without arguments for the interactive workspace.\n/side [question] or /btw [question] opens a right-hand side conversation.\nCtrl+G, then q detaches; tasks continue in the background.\n\nEnvironment:\n  CODEX_DECK_CODEX  Codex CLI executable (default: codex)\n  CODEX_DECK_HOME   Private state directory (default: XDG state or Windows LocalAppData/sessiondesk)\n\nLegacy SESSIONDESK_CODEX / SESSIONDESK_HOME remain supported.\n\nRequires Codex CLI with app-server support and an interactive UTF-8 terminal.",env!("CARGO_PKG_VERSION"));
+            println!("\n{}", ui::HELP);
             Ok(())
         }
         Some("--version" | "-V") => {

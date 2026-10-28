@@ -27,6 +27,16 @@ try:
     read_for(.15)
     os.write(master,b'\x07?')
     read_for(.15)
+    # Help must expose its final commands even in a small terminal.
+    fcntl.ioctl(master,termios.TIOCSWINSZ,struct.pack('HHHH',24,80,0,0))
+    os.kill(pid,signal.SIGWINCH)
+    read_for(.1)
+    os.write(master,b'\x1b[F')  # End: final help page
+    read_for(.15)
+    assert b'/reconnect' in output, 'help commands below the first screen are inaccessible'
+    os.write(master,b'\x1b[H')  # Home: first help page
+    read_for(.1)
+    assert b'GET STARTED' in output, 'help Home did not restore the first page'
     os.write(master,b'\x1b')
     for rows,cols in [(24,80),(24,100),(40,160)]:
         fcntl.ioctl(master,termios.TIOCSWINSZ,struct.pack('HHHH',rows,cols,0,0))

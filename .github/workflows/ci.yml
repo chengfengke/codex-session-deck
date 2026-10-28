@@ -19,6 +19,7 @@ jobs:
       - run: cargo clippy --locked --all-targets -- -D warnings
       - run: cargo test --locked
       - run: cargo build --locked
+      - run: python tests/help_smoke.py
       - run: python tests/platform_smoke.py
       - if: runner.os == 'Linux'
         run: |

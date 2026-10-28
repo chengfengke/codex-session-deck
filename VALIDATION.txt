@@ -17,3 +17,13 @@ Linux and Windows:
 Included executable: bin/codex-deck-macos-arm64 (Apple Silicon macOS).
 For Intel macOS/Linux/Windows, build on that platform with current stable Rust and C build tools.
 All backend validation used the fake Codex fixture; no real model requests.
+
+Help and shortcut audit (2026-10-28):
+- --help/-h share the complete in-app guide in assets/help.txt.
+- Help supports arrow/page/wheel scrolling, Home/End and viewport clamping.
+- cargo test: 28 passed, 1 ignored manual benchmark.
+- cargo clippy --all-targets -- -D warnings: passed.
+- CLI help smoke: passed without backend/terminal or state creation.
+- PTY smoke: passed, including End/Home at 80x24.
+- Shortcut tests cover prefix dispatch, command recognition, pane/tab navigation, resizing, newline, stop and detach.
+- Native verification performed on macOS; no real model requests.

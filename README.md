@@ -66,7 +66,7 @@ CODEX_DECK_HOME="$PWD/.state/custom" ./codex-deck
 
 ## 常用操作
 
-`Ctrl+G` 是前缀键：按下后松开，再按后面的键，无需同时按三键。
+`Ctrl+G` 是前缀键：按下后松开，再按后面的键，无需同时按三键。`codex-deck --help` 与界面中的 `F1`、`/help` 使用同一份快捷键和命令说明；界面帮助支持方向键、PgUp/PgDn、滚轮滚动，Home/End 跳转首尾。
 
 | 操作 | 按键 / 命令 |
 | --- | --- |
