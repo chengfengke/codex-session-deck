@@ -62,7 +62,11 @@ with tempfile.TemporaryDirectory(prefix='sd-models-') as tmp:
                 raise AssertionError(f"model did not update to {model}; actual={snap['data']['conversations']['local-a']['model']}; terminal={output[-2500:].decode(errors='replace')}")
             def open_picker(command='/model'):
                 os.write(fd,b'\x07:'+command.removeprefix('/').encode()+b'\r');read_for(.12)
-            read_for(.4);open_picker()
+            # Wait for the composer instead of a fixed delay: the startup banner holds the TUI back.
+            until=time.monotonic()+8
+            while b'Message' not in output and time.monotonic()<until:read_for(.05)
+            assert b'Message' in output, output.decode(errors='replace')
+            open_picker()
             assert b'Select model' in output and b'fixture-model-03' in output and b'Fixture choice 03' in output, output.decode(errors='replace')
             os.write(fd,b'\x1b[B\r');wait_model('fixture-model-04')
             open_picker('/models');os.write(fd,b'\x1b[200~fixture-model-10\x1b[201~\r');wait_model('fixture-model-10')
