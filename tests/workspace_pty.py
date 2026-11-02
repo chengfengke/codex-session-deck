@@ -96,7 +96,8 @@ with tempfile.TemporaryDirectory(prefix='sd-workspace-') as tmp:
             os.write(fd,b'\x07pSide A\r');wait(lambda s:'local-main' not in s['data']['collapsed_side_panels'])
             # Toolbar toggles also preserve the saved side layout and its drafts.
             for hidden in [True,False]:
-                os.write(fd,b'\x1b[<0;34;2M\x1b[<0;34;2m')
+                # The Hide/Show side button starts at x=36 (after the mascot), i.e. 1-based column 37.
+                os.write(fd,b'\x1b[<0;40;2M\x1b[<0;40;2m')
                 wait(lambda s:('local-main' in s['data']['collapsed_side_panels'])==hidden)
             command('find hidden-needle')
             s=wait(lambda s:s['search']['query']=='hidden-needle' and not s['search']['running'])

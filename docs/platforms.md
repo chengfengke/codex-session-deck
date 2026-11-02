@@ -2,7 +2,7 @@
 
 ## 构建和启动
 
-- Linux：Rust 1.89+、C 编译器；`sh scripts/build.sh`，然后 `./codex-deck`。
+- Linux：Rust 1.89+、C 编译器；`sh scripts/build.sh`，然后 `./codex-deck`。Codex 的命令沙箱需要 bubblewrap（如 `sudo apt-get install bubblewrap`），缺少时命令会在沙箱内失败并转为审批请求。
 - macOS：Rust 1.89+、Xcode Command Line Tools；同上。产物名包含 `macos-arm64` 或 `macos-x64`。
 - Windows：MSVC Rust 工具链、Visual Studio C++ Build Tools；PowerShell 执行 `./scripts/build.ps1` 和 `./codex-deck.ps1`。也可直接运行 `bin/codex-deck-windows-x64.exe`，ARM64 名称相应替换。
 
